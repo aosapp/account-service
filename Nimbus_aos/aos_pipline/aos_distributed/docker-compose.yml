@@ -1,0 +1,51 @@
+version: "3.0"
+services:
+  postgresql:
+   image: performancetesting/aos-postgres
+   ports:
+   - "POSTGRES_PORT:5432"
+   deploy:
+     placement:
+       constraints:
+         - node.hostname == HOST_NAME
+  tomcat_6:
+   env_file:
+   - .env
+   image: performancetesting/aos-main-app
+   ports:
+   - "MAIN_PORT:8080"
+   deploy:
+     placement:
+       constraints:
+         - node.hostname == HOST_NAME
+  tomcat_accountservice:
+   env_file:
+   - .env
+   image: performancetesting/aos-accountservice
+   ports:
+   - "ACCOUNT_PORT:8080"
+   deploy:
+     placement:
+       constraints:
+         - node.hostname == HOST_NAME
+  registry:
+   image: registry:2
+   ports:
+   - "REGISTRY_PORT:5000"
+   deploy:
+     placement:
+       constraints:
+         - node.hostname == HOST_NAME
+  jenkins:
+   env_file:
+   - .env	
+   image: performancetesting/aos-jenkins-pipline
+   ports:
+   - "JENKINS_PORT:8080"
+   volumes:
+   - WORKSPACE:/var/jenkins_home/jobs/DEMOAPP-PIPLINE/workspace
+   - /var/run/docker.sock:/var/run/docker.sock
+   deploy:
+     placement:
+       constraints:
+         - node.hostname == HOST_NAME
