@@ -27,7 +27,7 @@ eval $command2
 command2="sed -i 's/WORKSPACE_LEANFT/${three_levels_up_workspace}\/leanft/g' docker-compose.yml"
 eval $command2
 
-echo \#\!/bin/bash$'\n'"curl -X POST http://${JENKINS_IP}:${JENKINS_PORT}/job/DEMOAPP-PIPLINE/build" > $workspace/.git/hooks/post-commit
+echo \#\!/bin/bash$'\n'"curl -X POST http://${JENKINS_IP}:${JENKINS_PORT}/job/Adventage-Online-Shopping-Pipeline-Commit/build" > $workspace/.git/hooks/post-commit
 chmod +x ${workspace}/.git/hooks/post-commit
 if [ ! -d "/${USER_NAME}/.ssh" ]; then
   mkdir -p /${USER_NAME}/.ssh
