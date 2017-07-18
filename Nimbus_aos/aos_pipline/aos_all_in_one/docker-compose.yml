@@ -1,0 +1,41 @@
+version: '3.0'
+services:
+  postgresql:
+    image: performancetesting/aos-postgres:${TAG}
+    ports:
+    - "${POSTGRES_PORT}:5432"
+    container_name: postgresql
+    restart: always
+  tomcat_6:
+    env_file:
+    - .env
+    image: performancetesting/aos-main-app:${TAG}
+    ports:
+    - "${MAIN_PORT}:8080"
+    depends_on:
+    - "postgresql"
+    container_name: tomcat_6
+    restart: always
+  tomcat_account:
+    env_file:
+    - .env
+    image: performancetesting/aos-accountservice:${TAG}
+    ports:
+    - "${ACCOUNT_PORT}:8080"
+    depends_on:
+    - "postgresql"
+    container_name: tomcat_account
+    restart: always
+  jenkins:
+    env_file:
+    - .env
+    image: performancetesting/aos-jenkins-pipline:${TAG}
+    ports:
+    - "50000:50000"
+    - "${JENKINS_PORT}:8080"
+    volumes:
+    - WORKSPACE_ACCOUNT:/var/jenkins_home/jobs/Adventage-Online-Shopping-Pipeline-Commit/workspace
+    - WORKSPACE_LEANFT:/var/jenkins_home/jobs/Adventage-Online-Shopping-Build-LEANFT-Jar/workspace
+    - /var/run/docker.sock:/var/run/docker.sock
+    container_name: jenkins
+    restart: always

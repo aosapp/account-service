@@ -1,0 +1,32 @@
+version: '3'
+services:
+  postgresql:
+    image: performancetesting/aos-postgres:${TAG}
+    ports:
+    - "${POSTGRES_PORT}:5432"
+    container_name: postgresql
+    restart: always
+    volumes:
+    - data-volume-postgres:/var/lib/postgresql/data
+  tomcat_6:
+    env_file:
+    - .env
+    image: performancetesting/aos-main-app:${TAG}
+    ports:
+    - "${MAIN_PORT}:8080"
+    depends_on:
+    - "postgresql"
+    container_name: tomcat_6
+    restart: always
+  tomcat_account:
+    env_file:
+    - .env
+    image: performancetesting/aos-accountservice:${TAG}
+    ports:
+    - "${ACCOUNT_PORT}:8080"
+    depends_on:
+    - "postgresql"
+    container_name: tomcat_account
+    restart: always
+volumes:
+ data-volume-postgres:

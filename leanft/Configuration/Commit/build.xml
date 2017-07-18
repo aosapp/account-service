@@ -1,0 +1,14 @@
+<project default="junit" basedir=".">
+  <target name="junit">
+    <junit fork="yes" printsummary="on" haltonfailure="no" failureProperty="test.failed" dir="." showoutput="true">
+		<formatter type="xml"/>
+		<formatter type="plain" usefile="false"/>
+		<sysproperty key="url" value="${url}"/>
+		<test outfile="${result}" name="Web.AdvantageWebTest" methods="AddMainUserIfNotExists,NegativeLoginTest, purchaseLaptopTest"/>
+		<classpath>
+			<pathelement path="../AdvantageOnlineShoppingTests.jar"/>
+		</classpath>
+    </junit>
+   </target>
+</project>
+

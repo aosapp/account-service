@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata modelVersion="1.1.0">
+  <groupId>com.hp.lft</groupId>
+  <artifactId>report</artifactId>
+  <version>14.0.0-SNAPSHOT</version>
+  <versioning>
+    <snapshot>
+      <timestamp>20170216.135317</timestamp>
+      <buildNumber>1505</buildNumber>
+    </snapshot>
+    <lastUpdated>20170216135317</lastUpdated>
+    <snapshotVersions>
+      <snapshotVersion>
+        <extension>jar</extension>
+        <value>14.0.0-20170216.135317-1505</value>
+        <updated>20170216135317</updated>
+      </snapshotVersion>
+      <snapshotVersion>
+        <extension>pom</extension>
+        <value>14.0.0-20170216.135317-1505</value>
+        <updated>20170216135317</updated>
+      </snapshotVersion>
+      <snapshotVersion>
+        <classifier>javadoc</classifier>
+        <extension>jar</extension>
+        <value>14.0.0-20170216.135317-1505</value>
+        <updated>20170216135317</updated>
+      </snapshotVersion>
+      <snapshotVersion>
+        <classifier>jar-with-dependencies</classifier>
+        <extension>jar</extension>
+        <value>14.0.0-20170215.155502-1502</value>
+        <updated>20170215155502</updated>
+      </snapshotVersion>
+    </snapshotVersions>
+  </versioning>
+</metadata>
