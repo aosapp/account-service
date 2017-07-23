@@ -1,5 +1,7 @@
 #!/bin/bash
 . .env
+. .env_private
+
 if [ "${PUBLIC_IP}" = "LOCAL" ]; then
  interface=`route | grep -w "default" | awk '{print $8}'`
  ip=`ifconfig | grep -A1 ${interface} | awk -F":" '/inet addr/ {print $2}' | awk '{print $1}'`
@@ -8,13 +10,13 @@ elif [ "${PUBLIC_IP}" = "AMAZON" ]; then
 else
  ip=${PUBLIC_IP}
 fi
-command1="sed -i 's/HOST_IP_CALCULATED/$ip/g' .env"
+command1="sed -i 's/HOST_IP_CALCULATED/$ip/g' .env_private"
 eval $command1
-. .env
+. .env_private
 workspace=`pwd`
 
 docker_compose_path=$(echo "$workspace" | sed 's/\//\\\//g')
-command2="sed -i 's/DOCKER_COMPOSE_PATH_CALCULATED/${docker_compose_path}\//g' .env"
+command2="sed -i 's/DOCKER_COMPOSE_PATH_CALCULATED/${docker_compose_path}\//g' .env_private"
 eval $command2
 
 one_level_up_workspace="${workspace%/*}"
@@ -35,8 +37,8 @@ fi
 echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDVgtJmv2gShk05pz0Pzhrxuk+yv4uvIFoNfoUpd5/FWScl382hyUMp9CkRymtzjh4r/P6zlW2UX80kMUHiMmv3Khxz5eKTVpr/4C91GrdLvOYij5iQ1kbAoxmY+ih0NSds4AHyz/oNfCxgDnRPtapzL6Ionx6TY2t5lNMW1+OOnWsMMUe2pIqDBh+N7GlTwAjBbefBQdL397GrEXEuzV1ngw464d6Ea8yVTW7Kom6D2J3fIpEJo1PmF0XCzON3oOau9K9P6999WxijWI5PSkwIL+vGyDnmM9xkSXzNnwdwVWA7Uu1fbgE5c50iACHv5chYfAyr5f3vtV1ZMbVrDV5l AOS_DeVops" > /${USER_NAME}/.ssh/authorized_keys
 
 # if we are in AMAZON we need to remove the proxy from the containers, so we add it to the .evn file
-if [ "$PUBLIC_IP" == "AMAZON" ] && [ -z "$(cat .env | grep -m 1 "http_proxy")" ];then
- printf "\nhttp_proxy=\nhttps_proxy=">> .env
+if [ "$PUBLIC_IP" == "AMAZON" ] && [ -z "$(cat .env_private | grep -m 1 "http_proxy")" ];then
+ printf "\nhttp_proxy=\nhttps_proxy=">> .env_private
 fi
 
 docker login -u=advantageonlineshoppingapp -p=W3lcome1

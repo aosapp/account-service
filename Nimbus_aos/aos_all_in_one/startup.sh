@@ -1,5 +1,7 @@
 #!/bin/bash
 . .env
+. .env_private
+
 if [ "${PUBLIC_IP}" = "LOCAL" ]; then
  interface=`route | grep -w "default" | awk '{print $8}'`
  ip=`ifconfig | grep -A1 ${interface} | awk -F":" '/inet addr/ {print $2}' | awk '{print $1}'`
@@ -8,8 +10,8 @@ elif [ "${PUBLIC_IP}" = "AMAZON" ]; then
 else
  ip=${PUBLIC_IP}
 fi
-command1="sed -i 's/HOST_IP_CALCULATED/$ip/g' .env"
+command1="sed -i 's/HOST_IP_CALCULATED/$ip/g' .env_private"
 eval $command1
 docker login -u=advantageonlineshoppingapp -p=W3lcome1
+docker-compose pull
 docker-compose up -d
-

@@ -13,6 +13,7 @@ services:
   tomcat_accountservice:
    env_file:
    - .env
+   - .env_private
    image: performancetesting/aos-accountservice:TAG
    ports:
    - "ACCOUNT_PORT:8080"
@@ -23,6 +24,7 @@ services:
   tomcat_6:
    env_file:
    - .env
+   - .env_private
    image: performancetesting/aos-main-app:TAG
    ports:
    - "MAIN_PORT:8080"

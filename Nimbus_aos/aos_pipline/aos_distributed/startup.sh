@@ -1,5 +1,6 @@
 #!/bin/bash
 . .env
+. .env_private
 
 # evaluate the path to accountservice to use as a workspace in the pipeline jenkins job
 workspace=`pwd`
@@ -12,7 +13,7 @@ three_levels_up_workspace=$(echo "$three_levels_up_workspace" | sed 's/\//\\\//g
 #eval $command1
 
 #workspace=$(echo "$workspace" | sed 's/\//\\\//g')
-#command2="sed -i 's/WORKSPACE_PATH_CALCULATED/${workspace}\//g' .env"
+#command2="sed -i 's/WORKSPACE_PATH_CALCULATED/${workspace}\//g' .env_private"
 #eval $command2
 
 sed -i "s/POSTGRES_PORT/${POSTGRES_PORT}/g" docker-compose.yml
@@ -23,8 +24,8 @@ sed -i "s/JENKINS_PORT/${JENKINS_PORT}/g" docker-compose.yml
 #sed -i "s/TAG/${TAG}/g" docker-compose.yml
 
 # if we are in AMAZON we need to remove the proxy from the containers, so we add it to the .evn file
-if [ "$PUBLIC_IP" == "AMAZON" ] && [ -z "$(cat .env | grep -m 1 "http_proxy")" ];then
- printf "\nhttp_proxy=\nhttps_proxy=">> .env
+if [ "$PUBLIC_IP" == "AMAZON" ] && [ -z "$(cat .env_private | grep -m 1 "http_proxy")" ];then
+ printf "\nhttp_proxy=\nhttps_proxy=">> .env_private
 fi
 
 if [ "$QUALI" == "NO" ];then
@@ -36,17 +37,17 @@ if [ "$QUALI" == "NO" ];then
 # change host name
  docker node ls | grep -v Leader | grep -v HOSTNAME | awk '{print $2}' | while read line; do command="sed -i '0,/HOST_NAME/{s/HOST_NAME/$line/}' docker-compose.yml"; eval $command; done
 # change public ip
- docker node ls | grep -v Leader | grep -v HOSTNAME | awk '{print $2}' | xargs docker inspect $1 | grep "Addr" | awk '{ gsub("\"",""); print $2}' | while read line; do command="sed -i '0,/PUBLIC_IP_CALCULATED/{s/PUBLIC_IP_CALCULATED/$line/}' .env"; eval $command; done
+ docker node ls | grep -v Leader | grep -v HOSTNAME | awk '{print $2}' | xargs docker inspect $1 | grep "Addr" | awk '{ gsub("\"",""); print $2}' | while read line; do command="sed -i '0,/PUBLIC_IP_CALCULATED/{s/PUBLIC_IP_CALCULATED/$line/}' .env_private"; eval $command; done
 
 # host name
  command3="sed -i 's/HOST_NAME/$(docker node ls | grep -w Leader | awk '{print $3}')/' docker-compose.yml"
  eval $command3
 # ip of the host
- command4="sed -i 's/PUBLIC_IP_CALCULATED/$(docker node ls | grep -w Leader | docker inspect $(awk '{print $3}') | grep -m2 "Addr" | tail -n1 | awk '{ gsub("\"",""); print $2}' | awk -F":" '{print $1}')/' .env"
+ command4="sed -i 's/PUBLIC_IP_CALCULATED/$(docker node ls | grep -w Leader | docker inspect $(awk '{print $3}') | grep -m2 "Addr" | tail -n1 | awk '{ gsub("\"",""); print $2}' | awk -F":" '{print $1}')/' .env_private"
  eval $command4
 
  #edit .git/hooks
- echo \#\!/bin/bash$'\n'"curl -X POST http://${JENKINS_IP}:${JENKINS_PORT}/job/DEMOAPP-PIPLINE/build" > $workspace/.git/hooks/post-commit
+ echo \#\!/bin/bash$'\n'"curl -X POST http://${JENKINS_IP}:${JENKINS_PORT}/job/Adventage-Online-Shopping-Pipeline-Commit/build" > $workspace/.git/hooks/post-commit
  chmod +x $workspace/.git/hooks/post-commit
 
 else
@@ -75,7 +76,7 @@ else
  sed -i 's/.*WORKSPACE_LEANFT.*//g' docker-compose.yml
 fi
 
-. .env
+. .env_private
 [ -f "/etc/docker/daemon.json" ] && rm -rf "/etc/docker/daemon.json"
 echo "{ \"insecure-registries\":[\"${REGISTRY_IP}:${REGISTRY_PORT}\"] }" > /etc/docker/daemon.json
 service docker restart
