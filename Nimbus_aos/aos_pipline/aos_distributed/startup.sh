@@ -10,7 +10,7 @@ if [ "${PUBLIC_IP}" = "LOCAL" ] && ([ -z "${PROXY_HOST}" ] || [ -z "${PROXY_PORT
  echo "Please set Proxy host & port"
  exit 1
 elif [ "${PUBLIC_IP}" = "LOCAL" ] && [ -z "$(cat .env_private | grep -m 1 "http_proxy")" ];then
-  printf "\nhttp_proxy=${PROXY_HOST}:${PROXY_PORT}\nhttps_proxy=${PROXY_HOST}:${PROXY_PORT}" >> .env_private
+  printf "\nhttp_proxy=http://${PROXY_HOST}:${PROXY_PORT}\nhttps_proxy=http://${PROXY_HOST}:${PROXY_PORT}" >> .env_private
 fi
 
 # evaluate the path to accountservice to use as a workspace in the pipeline jenkins job
