@@ -1,0 +1,147 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.hp.lft</groupId>
+	<artifactId>leanft-sdk-parent</artifactId>
+	<version>14.1.0-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>LeanFT</name>
+
+	<parent>
+		<groupId>com.hp.lft</groupId>
+		<artifactId>leanft-super-parent</artifactId>
+		<version>14.1.0-SNAPSHOT</version>
+	</parent>
+
+	<repositories>
+		<repository>
+			<id>nexus</id>
+			<name>nexus</name>
+			<url>http://mydtbld0028.hpeswlab.net:8081/nexus/content/groups/leanft-public</url>
+		</repository>
+	</repositories>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<configuration>
+					<archive>
+						<manifestEntries>
+							<jenkins-build-number>${full.build.version}</jenkins-build-number>
+							<Implementation-Version>${project.version}</Implementation-Version>
+							<svn-revision>${prefix.committedRevision}</svn-revision>
+						</manifestEntries>
+						<manifest>
+							<addClasspath>true</addClasspath>
+						</manifest>
+
+					</archive>
+				</configuration>
+
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<configuration>
+					<excludePackageNames>com.hp.lft.sdk.internal:com.hp.lft.sdk.internal.*:com.hp.leanft.end2endtests:com.hp.lft.model:com.hp.lft.report.internal:com.hp.lft.report.internal.*:com.hp.lft.verifications.internal:com.hp.lft.verifications.internal.*</excludePackageNames>
+					<windowtitle>LeanFT Java SDK Reference, Version 14.1</windowtitle>
+					<header>&lt;b&gt;HP Lean Functional Testing, Version 14.1&lt;/b&gt;</header>
+					<bottom>&amp;copy; 2015 Hewlett-Packard Development Company, L.P.</bottom>
+
+				</configuration>
+				<executions>
+					<execution>
+						<id>attach-javadocs</id>
+						<phase>package</phase>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>copy-dependencies</id>
+						<phase>package</phase>
+						<goals>
+							<goal>copy-dependencies</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>../dependencies</outputDirectory>
+							<overWriteReleases>false</overWriteReleases>
+							<overWriteSnapshots>false</overWriteSnapshots>
+							<overWriteIfNewer>true</overWriteIfNewer>
+							<includeScope>compile</includeScope>
+							<excludeGroupIds>com.hp.lft</excludeGroupIds>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>com.google.code.maven-svn-revision-number-plugin</groupId>
+				<artifactId>maven-svn-revision-number-plugin</artifactId>
+				<version>1.7</version>
+				<executions>
+                    <execution>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                    </execution>
+                </executions>
+				<configuration>
+					<verbose>true</verbose>
+					<failOnError>false</failOnError>
+					<entries>
+						<entry>
+							<prefix>prefix</prefix>
+						</entry>
+					</entries>
+				</configuration>
+				<dependencies>
+					<!-- forcing svnkit:1.7.0-SNAPSHOT -->
+					<dependency>
+						<groupId>org.tmatesoft.svnkit</groupId>
+						<artifactId>svnkit</artifactId>
+						<version>1.7.6</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+			
+			<plugin>
+				<groupId>com.hpe.mvn.plugins</groupId>
+				<artifactId>mini-pom-creator</artifactId>
+				<version>1.0</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>create</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+	<modules>
+		<module>Common</module>
+		<module>LeanFT</module>
+		<module>LeanFT-standalone</module>
+		<module>LeanFT_Model</module>
+		<module>LeanFT_ReportBuilder</module>
+		<module>LeanFT_ReportBuilder-standalone</module>
+		<module>LeanFT_Report</module>
+		<module>LeanFT_Report-shaded</module>
+		<module>LeanFT_UnitTesting</module>
+		<module>LeanFT_Verifications</module>
+		<module>EndToEndTests</module>
+	</modules>
+</project>
