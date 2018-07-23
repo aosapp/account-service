@@ -1,0 +1,11 @@
+account.hibernate.db.url.host=localhost
+account.hibernate.db.url.port=5432
+account.hibernate.db.name=adv-account
+account.hibernate.db.login=postgres
+account.hibernate.db.password=admin
+#account.hibernate.dialect=org.hibernate.dialect.PostgreSQL94Dialect
+account.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+hibernate.db.driver_classname=org.postgresql.Driver
+
+db.url.prefix=jdbc:postgresql
+db.url.query=loglevel=0

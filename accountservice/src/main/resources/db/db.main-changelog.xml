@@ -1,0 +1,26 @@
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-2.0.xsd">
+    <!--
+    <preConditions>
+        <sequenceExists sequenceName=""></sequenceExists>
+    </preConditions>
+    -->
+    <!--Exapmle-->
+    <!--<include file="db/db.changelog.20151229034445.xml"></include>-->
+
+    <!--This changelog created by liquibase according to hibernate changes. In this step the real DB has changes only for lb tables.-->
+    <!--<changeSet author="evg_test" id="12345-2">-->
+    <!--<createTable tableName="evgt_main">-->
+    <!--<column autoIncrement="true" name="ID" type="BIGINT">-->
+    <!--<constraints nullable="false" primaryKey="true"/>-->
+    <!--</column>-->
+    <!--<column name="PRNAME" type="VARCHAR(255)"/>-->
+    <!--<column name="DESCR" type="VARCHAR(255)"/>-->
+    <!--</createTable>-->
+    <!--</changeSet>-->
+
+    <include file="db/db.main-update.changelog.xml"></include>
+    <include file="db/db.changelog.sql"></include>
+
+</databaseChangeLog>
