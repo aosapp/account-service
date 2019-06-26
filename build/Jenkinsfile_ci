@@ -1,0 +1,452 @@
+// all environment varoables we must declare with "aos_" prefix
+
+def deliveryNumber() {
+def matcher = readFile('build/version.xml') =~ '<deliveryNumber>(.+)</deliveryNumber>'
+matcher ? matcher[0][1] : null
+}
+
+def version() {
+def matcher = readFile('build/version.xml') =~ '<version>(.+)</version>'
+matcher ? matcher[0][1] : null
+}
+
+try{
+node('UbuntuDemoApp'){
+
+def mvnHome = tool name: 'Maven 3.3.9_Linux', type: 'hudson.tasks.Maven$MavenInstallation'
+env.PATH="${env.PATH}:${mvnHome}/bin"
+
+if (env.Resumed == "true"){
+ if (!fileExists("${WORKSPACE}/resumed_build_params.groovy"))
+   echo "cannot resume after build success."
+ else 
+   load "${WORKSPACE}/resumed_build_params.groovy"
+}
+
+stage('Checkout'){
+
+env.aos_stageName="Checkout"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  checkout([$class: 'GitSCM', branches: [[name: '*/master']], browser: [$class: 'GithubWeb', repoUrl: 'https://github.houston.softwaregrp.net/nimbus/aos-source'], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'WipeWorkspace']], gitTool: 'Git version 2.8.0-rc4 Linux', submoduleCfg: [], userRemoteConfigs: [[url: 'git@github.houston.softwaregrp.net:nimbus/aos-source.git']]])
+  
+  sh 'git checkout master'
+  
+  env.aos_build_main_wars=false
+  env.aos_build_both_wars=false
+  env.aos_copy_Nimbus_files=false
+  commits = sh(returnStdout: true, script: 'git show -n 2 --pretty="format:" --name-only | awk -F/ \'{print $1}\'').trim()
+
+  println(commits)
+    
+  if (commits == "" || commits == null){
+     println("no commits were detected, aos_build_both_wars=true")
+	 env.aos_build_both_wars=true
+	 env.aos_copy_Nimbus_files=true
+  }else{
+
+      if (commits.contains("catalog") || commits.contains("mastercredit") || commits.contains("order") || commits.contains("safepay") || commits.contains("shipex") || commits.contains("admin")) {
+          env.aos_build_main_wars=true
+      }
+      if (commits.contains("accountservice")) {
+          env.aos_build_accountservice_war=true
+      }
+      if (commits.contains("root") || commits.contains("common") || commits.contains("shared_resources")) {
+          env.aos_build_both_wars=true
+      }
+      if (commits.contains("Nimbus_aos")) {
+          env.aos_copy_Nimbus_files=true
+      }
+  }
+  
+  println("aos_build_main_wars = $aos_build_main_wars")
+  println("aos_build_accountservice_war = $aos_build_accountservice_war")
+  println("aos_build_both_wars = $aos_build_both_wars")
+  println("aos_copy_Nimbus_files = $aos_copy_Nimbus_files")
+  
+  sh '''current_delivery_number=`cat build/version.xml | grep "<deliveryNumber>" | sed -e \'s/<[^>]*>//g\'`
+  echo "current_delivery_number=$current_delivery_number"
+  new_delivery_number=$(($current_delivery_number+1))
+  echo "new_delivery_number=$new_delivery_number"
+  sed -i "s/<deliveryNumber>.*/<deliveryNumber>$new_delivery_number<\\/deliveryNumber>/g" "build/version.xml"
+  echo "end edit delivery number with $new_delivery_number"
+  
+  new_commitId=`git log --format="%H" -n 1`
+  echo "new_commitId=$new_commitId"
+  sed -i "s/<commitId>.*/<commitId>$new_commitId<\\/commitId>/g" "build/version.xml"
+  echo "end edit commit id with $new_commitId"'''
+  
+  sh 'cat build/version.xml'
+
+  env.aos_version = version()
+    if (aos_version) {
+      echo "Building version ${aos_version}"
+  }
+  
+  env.aos_delivery = deliveryNumber()
+    if (aos_delivery) {
+      echo "Building deliveryMumber ${aos_delivery}"
+  }
+  
+  env.aos_description="Version: ${aos_version}, Delivery: ${aos_delivery}"
+  //currentBuild.description = "Version: ${aos_version}, Delivery: ${aos_delivery}"
+}
+}
+
+load "${WORKSPACE}/build/machines_ip.groovy"
+
+stage('Build'){
+
+env.aos_stageName="Build"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+  
+  println("aos_build_main_wars = $aos_build_main_wars")
+  println("aos_build_accountservice_war = $aos_build_accountservice_war")
+  println("aos_build_both_wars = $aos_build_both_wars")
+  println("aos_copy_Nimbus_files = $aos_copy_Nimbus_files")
+  println("aos_force_build_wars = $aos_force_build_wars")
+
+  sh '''#!/bin/sh
+
+    export http_proxy=http://proxy.il.hpecorp.net:8080
+    export https_proxy=http://proxy.il.hpecorp.net:8080
+    export npm_config_http_proxy=
+    export npm_config_https_proxy=
+    export npm_config_cache=./.cache
+    export no_proxy="localhost,127.0.0.1,.hpeswlab.net,.hpswlabs.adapps.hp.com,.devlab.ad"
+
+    command="sed -i \'s/production.host.ip.*/production.host.ip=$aos_production_ip/g\' accountservice/src/main/resources/DemoApp.properties"
+    eval $command'''
+
+  if (env.aos_build_both_wars == "true" || env.aos_build_main_wars == "true" || env.aos_force_build_wars == "true"){
+    sh "bash edit_root_pom.sh"
+
+    sh '''#!/bin/sh
+    mvn -P production,pack_wars_without_accountservices package deploy -am -ff -e -X
+    '''
+  }
+  else if(env.aos_build_accountservice_war == "true"){
+    sh '''#!/bin/sh
+    cd accountservice
+    mvn -P production package deploy -am -ff -e
+    '''
+  }
+  }
+}
+
+stage('CI'){
+
+env.aos_stageName="CI"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'c3de99a2-ff92-4a6a-873b-5f866bc60977',
+  usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_PASSWORD']]) {
+  
+  sh "docker login -u=${env.DOCKERHUB_USERNAME} -p=${env.DOCKERHUB_PASSWORD}"
+  sh """
+  ssh "$aos_ci_ip" \"docker login -u=${env.DOCKERHUB_USERNAME} -p=${env.DOCKERHUB_PASSWORD}\"
+  """
+  
+  sh '''#!/bin/bash
+  export http_proxy="http://proxy.il.hpecorp.net:8080"
+  export https_proxy="http://proxy.il.hpecorp.net:8080"
+  
+  if $aos_build_both_wars || $aos_build_main_wars || $aos_force_build_wars;then
+    all_wars_path=./root/target/wars.zip
+	cp ${all_wars_path} ./Dockerfiles/aos_all_in_one/tomcat_all
+	cd ./Dockerfiles/aos_all_in_one/tomcat_all
+    docker build -t advantageonlineshopping/aos-main-app-dev .
+	docker push advantageonlineshopping/aos-main-app-dev:latest
+  fi
+  if $aos_build_both_wars || $aos_build_accountservice_war || $aos_force_build_wars;then
+    accountservice_war_path=$WORKSPACE/accountservice/target/accountservice.war
+	cp ${accountservice_war_path} $WORKSPACE/Dockerfiles/aos_all_in_one/tomcat_account
+    cd $WORKSPACE/Dockerfiles/aos_all_in_one/tomcat_account
+    docker build -t advantageonlineshopping/aos-accountservice-dev .
+	docker push advantageonlineshopping/aos-accountservice-dev:latest
+  fi
+  
+  cd ../../../
+  
+  if $aos_copy_Nimbus_files || $aos_force_copy_configuration_files ;then
+    #replace the postgres password to admin
+    sed -i 's/password/admin/g' "./Nimbus_aos/aos_all_in_one/.env_private"
+    sed -i 's/8080/80/g' "./Nimbus_aos/aos_all_in_one/.env"
+    sed -i 's/proxy_host/proxy.il.hpecorp.net/g' "./Nimbus_aos/aos_all_in_one/.env"
+    sed -i 's/proxy_port/8080/g' "./Nimbus_aos/aos_all_in_one/.env"
+    sed -i 's/.*volume.*//g' "./Nimbus_aos/aos_all_in_one/docker-compose.yml"
+    
+    #copy files aside for staging machine
+    mkdir -p ./Nimbus_aos/aos_all_in_one/staging
+    cp ./Nimbus_aos/aos_all_in_one/docker-compose.yml ./Nimbus_aos/aos_all_in_one/staging/docker-compose.yml
+    sed -i '/image/ s/$/-dev:ready_for_staging/' ./Nimbus_aos/aos_all_in_one/staging/docker-compose.yml
+    cp ./Nimbus_aos/aos_all_in_one/startup.sh ./Nimbus_aos/aos_all_in_one/staging/startup.sh
+    cp ./Nimbus_aos/aos_all_in_one/.env ./Nimbus_aos/aos_all_in_one/staging/.env
+    cp ./Nimbus_aos/aos_all_in_one/.env_private ./Nimbus_aos/aos_all_in_one/staging/.env_private
+    #replace the env value to be on AMAZON
+    sed -i 's/LOCAL/AMAZON/g' "./Nimbus_aos/aos_all_in_one/staging/.env"
+    sed -i 's/8080/80/g' "./Nimbus_aos/aos_all_in_one/staging/.env"
+    
+    #copy the docker-compose to ci machine
+    scp "./Nimbus_aos/aos_all_in_one/docker-compose.yml" root@$aos_ci_ip:/root
+    scp "./Nimbus_aos/aos_all_in_one/startup.sh" root@$aos_ci_ip:/root
+    scp "./Nimbus_aos/aos_all_in_one/.env" root@$aos_ci_ip:/root
+    scp "./Nimbus_aos/aos_all_in_one/.env_private" root@$aos_ci_ip:/root
+    
+    ssh "$aos_ci_ip" \"chmod +x /root/startup.sh && sed -i '/image/ s/$/-dev/' /root/docker-compose.yml\"
+  fi
+  
+  if $aos_build_both_wars || $aos_build_accountservice_war || $aos_build_main_wars || $aos_force_build_wars ;then
+    # docker compose pull the latest images, so if there is a newer image the service of that image will be stopped and recreated
+    ssh "$aos_ci_ip" \"cd /root && docker-compose down -v\"
+    #edit the docker-compose to take images of dev
+    ssh "$aos_ci_ip" \"/root/startup.sh\"
+  fi
+  '''
+  }
+  }
+}
+
+stage('CI Tests'){
+
+env.aos_stageName="CI_Tests"
+
+if ((env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName) || env.run_CI_tests == "false"){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+ 
+  build job: 'demoapp_tests_leanft_maven', parameters: [[$class: 'StringParameterValue', name: 'URL', value: "http://$aos_ci_ip"]], propagate: true
+}
+}
+
+stage('Promote to Release & latest'){
+
+env.aos_stageName="Promote_to_Release_and_latest"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+  echo "check if accountservice build"
+  if(env.aos_build_accountservice_war == "true" && (env.aos_build_both_wars == "false" && env.aos_build_main_wars == "false" && env.aos_force_build_wars == "false")){
+       echo "downloading latest wars.zip from Nexus"
+       sh"""
+       mkdir root/target && cd root/target
+        curl -fsSL -o "wars.zip" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/repositories/adm-demo-app-release/content/com/advantage/online/store/Advantage_Online_Shopping_Design_Release/latestVersion/Advantage_Online_Shopping_Design_Release-latestVersion.zip"
+       """
+  }
+  if (env.aos_build_both_wars == "true" || env.aos_build_accountservice_war == "true" || env.aos_build_main_wars == "true" || env.aos_force_build_wars == "true"){
+  
+  sh """
+  #create a new wars.zip including all the wars to upload to nexus
+  cd root/target
+  mkdir temp
+  mv wars.zip temp
+  cd temp
+  unzip "wars.zip" -d "."
+  cp ../../../accountservice/target/accountservice.war .
+  zip -r "wars.zip" .
+  mv wars.zip ..
+  rm -rf temp
+  """
+  
+  withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'e1e6e164-d262-4718-93db-69a4b24caf0b',
+  usernameVariable: 'USERNAME', passwordVariable: 'NEXUS_DEPLOY_PASSWORD']]) {
+  
+  sh '''#!/bin/bash
+  #declare parameters
+  REPOSITORY_ID="adm-demo-app-release"
+  REPOSITORY_URL="http://mydtbld0028.hpeswlab.net:8081/nexus/content/repositories/${REPOSITORY_ID}/"
+  GROUP_ID=com.advantage.online.store
+  ARTIFACT_ID="Advantage_Online_Shopping_Design_Release_${aos_version}"
+  ARTIFACT_ID_LATEST="Advantage_Online_Shopping_Design_Release"
+  DELIVERY_NUMBER_LATEST="latestVersion"
+  PACKAGING=zip
+  FILE_NAME="root/target/wars.zip"
+  VERSION_FILE_NAME="build/pom.xml"
+  
+  cp "build/version.xml" "build/pom.xml"
+  #***************************************************************************UPLOAD TO RELEASE***************************************************************************
+  #upload the zip with all the wars
+  curl -f -v -F r=${REPOSITORY_ID} -F hasPom="false" -F e=${PACKAGING} -F g=${GROUP_ID} -F a=${ARTIFACT_ID} -F v=${aos_delivery} -F p=zip -F file=@${FILE_NAME} --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  #upload the xml file with the version
+  curl -f -v -F r=${REPOSITORY_ID} -F hasPom="false" -F e=${PACKAGING} -F g=${GROUP_ID} -F a=${ARTIFACT_ID} -F c=version -F v=${aos_delivery} -F p=pom -F file=@${VERSION_FILE_NAME} --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  
+  
+  #***************************************************************************UPLOAD TO LATEST****************************************************************************
+  #upload the zip with all the wars
+  curl -f -v -F r=${REPOSITORY_ID} -F hasPom="false" -F e=${PACKAGING} -F g=${GROUP_ID} -F a=${ARTIFACT_ID_LATEST} -F v=${DELIVERY_NUMBER_LATEST} -F p=zip -F file=@${FILE_NAME} --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  #upload the xml file with the version
+  curl -f -v -F r=${REPOSITORY_ID} -F hasPom="false" -F e=${PACKAGING} -F g=${GROUP_ID} -F a=${ARTIFACT_ID_LATEST} -F c=version -F v=${DELIVERY_NUMBER_LATEST} -F p=pom -F file=@${VERSION_FILE_NAME} --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  
+  '''
+  }
+  }
+  }
+}
+
+stage('Promote ready_for_staging tag to Dockerhub'){
+
+env.stageName="Promote_to_Dockerhub"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+  
+  if (env.aos_build_both_wars == "true" || env.aos_build_accountservice_war == "true" || env.aos_build_main_wars == "true" || env.aos_force_build_wars == "true"){
+    
+    withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'c3de99a2-ff92-4a6a-873b-5f866bc60977',
+    usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_PASSWORD']]) {
+    
+    sh "docker login -u=${env.DOCKERHUB_USERNAME} -p=${env.DOCKERHUB_PASSWORD}"
+    
+    sh '''
+    export http_proxy="http://proxy.il.hpecorp.net:8080"
+    export https_proxy="http://proxy.il.hpecorp.net:8080"
+    IMAGEID_6_wars=`docker images | grep "advantageonlineshopping/aos-main-app-dev" | grep latest | awk -F" " '{ print $3 }'`
+    IMAGEID_accountservice_war=`docker images | grep "advantageonlineshopping/aos-accountservice-dev" | grep latest | awk -F" " '{ print $3 }'`
+    
+    docker tag ${IMAGEID_6_wars} advantageonlineshopping/aos-main-app-dev:ready_for_staging
+    docker tag ${IMAGEID_accountservice_war} advantageonlineshopping/aos-accountservice-dev:ready_for_staging
+    
+    docker push advantageonlineshopping/aos-main-app-dev:ready_for_staging
+    docker push advantageonlineshopping/aos-accountservice-dev:ready_for_staging
+    '''
+  }
+  }
+  }
+}
+
+stage('Commit to Stash build/version.xml'){
+
+env.aos_stageName="Commit_to_Stash_version.xml"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  sh '''mvn clean
+  cd 	./pack_wars
+  mvn clean
+  cd ..
+  [ -f "./build/pom.xml" ] && rm -rf "./build/pom.xml"
+  git pull -q
+  git status
+  git add "build/version.xml"
+  git commit -m "updates version.xml" --quiet
+  git push https://kubany:5a44daacef44e8c31b413e7143777baa1c813263@github.houston.softwaregrp.net/nimbus/aos-source.git master
+  '''
+  }
+}
+
+stage('Staging'){
+
+env.aos_stageName="Staging"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+    
+    if (env.aos_copy_Nimbus_files == "true" || env.aos_force_copy_configuration_files == "true"){
+
+      sh '''
+      #copy the docker-compose to staging machine
+      scp "./Nimbus_aos/aos_all_in_one/staging/docker-compose.yml" root@$aos_staging_ip:/root
+      scp "./Nimbus_aos/aos_all_in_one/staging/startup.sh" root@$aos_staging_ip:/root
+      scp "./Nimbus_aos/aos_all_in_one/staging/.env" root@$aos_staging_ip:/root
+      scp "./Nimbus_aos/aos_all_in_one/staging/.env_private" root@$aos_staging_ip:/root
+	  '''
+	}
+	 
+    withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'c3de99a2-ff92-4a6a-873b-5f866bc60977',
+    usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_PASSWORD']]) {
+	 
+    sh '''
+     docker pull advantageonlineshopping/aos-main-app-dev:staging
+     docker pull advantageonlineshopping/aos-accountservice-dev:staging
+     if [ "$(docker images | grep "advantageonlineshopping/aos-accountservice-dev" | grep "ready_for_staging" | awk '{print $3}')" != "$(docker images | grep "advantageonlineshopping/aos-accountservice-dev" | grep -w "staging" | awk '{print $3}')" ] || [ "$(docker images | grep "advantageonlineshopping/aos-main-app-dev" | grep "ready_for_staging" | awk '{print $3}')" != "$(docker images | grep "advantageonlineshopping/aos-main-app-dev" | grep -w "staging" | awk '{print $3}')" ]; then
+      echo "yes" >update_staging.txt
+     else
+      echo "no" >update_staging.txt
+     fi
+    '''
+    
+    def update_staging = readFile "update_staging.txt";
+    update_staging = update_staging.trim();
+    println update_staging
+    
+    sh """
+      if [ "$update_staging" = "yes" ];then
+       ssh "$aos_staging_ip" \'docker login -u=${env.DOCKERHUB_USERNAME} -p=${env.DOCKERHUB_PASSWORD} && cd /root && docker-compose down -v && docker-compose pull && chmod +x startup.sh && ./startup.sh\'
+      fi
+    """
+    }
+  }
+}
+
+currentBuild.description = "${aos_description}"
+
+mail (to: 'adm_demo_app_development@microfocus.com',
+	subject: "Success: '${env.JOB_NAME}' (${env.BUILD_NUMBER}) -Version: ${aos_version}, Delivery number ${aos_delivery}",
+	body: "Review the information at: ${env.JOB_URL}",
+	mimeType: 'text/html');
+	
+}	
+}catch(err){
+    node('UbuntuDemoApp'){
+	
+	if (env.aos_description != null)
+	 currentBuild.description = "${aos_description}"
+	 
+	env.aos_failed_stageName=env.aos_stageName
+	
+	dir(""){
+	
+	echo sh(returnStdout: true, script: 'env | grep "aos_" >${WORKSPACE}/resumed_build_params.groovy')
+	
+	sh 'sed -i \'s/^/env./g\' ${WORKSPACE}/resumed_build_params.groovy'
+    sh 'sed -i \'s/$/"/g\' ${WORKSPACE}/resumed_build_params.groovy'
+    sh 'sed -i \'s/=/="/g\' ${WORKSPACE}/resumed_build_params.groovy'
+	
+	def aos_version = version()
+    if (aos_version) {
+    echo "Building version ${aos_version}"
+    }
+
+    def aos_delivery = deliveryNumber()
+    if (aos_delivery) {
+    echo "Building deliveryMumber ${aos_delivery}"
+    }
+
+    currentBuild.result = 'FAILURE'
+	mail (to: 'adm_demo_app_development@microfocus.com',
+		subject: "Failed: '${env.JOB_NAME}' (${env.BUILD_NUMBER}) -Version: ${aos_version}, Delivery number ${aos_delivery}",
+		body: "Review the information at: ${env.JOB_URL}",
+		mimeType: 'text/html');
+	}
+	}
+}

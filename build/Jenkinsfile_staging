@@ -1,0 +1,334 @@
+// all environment varoables we must declare with "aos_" prefix
+import jenkins.model.*
+
+def mac_node_online = Hudson.instance.slaves.find({it.name == 'mac'}).getComputer().isOnline();
+
+def Dependency_deliveryNumber() {
+def matcher = readFile('build/version.xml') =~ '<deliveryNumber>(.+)</deliveryNumber>'
+matcher ? matcher[0][1] : null
+}
+
+def Dependency_version() {
+def matcher = readFile('build/version.xml') =~ '<version>(.+)</version>'
+matcher ? matcher[0][1] : null
+}
+
+def check_job_result(res){
+    if (result.equals("SUCCESS")) {
+    } else {
+        sh "exit 1" // this fails the stage
+    }
+}
+
+
+try{
+node('UbuntuDemoApp'){
+
+if (env.Resumed == "true"){
+ if (!fileExists("${WORKSPACE}/resumed_build_params.groovy"))
+   echo "cannot resume after build success."
+ else 
+   load "${WORKSPACE}/resumed_build_params.groovy"
+}else{
+
+  checkout([$class: 'GitSCM', branches: [[name: '*/master']], browser: [$class: 'GithubWeb', repoUrl: 'https://github.houston.softwaregrp.net/nimbus/aos-source'], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: 'build/machines_ip.groovy']]], [$class: 'WipeWorkspace']], gitTool: 'Git version 2.8.0-rc4 Linux', submoduleCfg: [], userRemoteConfigs:[[ url: 'git@github.houston.softwaregrp.net:nimbus/aos-source.git']]])
+  
+  load "${WORKSPACE}/build/machines_ip.groovy"
+
+}
+
+
+try{
+    stage('Android Tests'){
+
+        env.aos_stageName="Android_Tests"
+        if ((env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName) || env.run_android_tests == "false"){
+            currentBuild.result = 'SUCCESS'
+        }else{
+
+            env.Resumed = "false"
+
+            def android_test = build job: 'demoapp_folder/demoapp_tests_leanft_maven', parameters: [[$class: 'StringParameterValue', name: 'job_type', value: 'Android'], [$class: 'StringParameterValue', name: 'URL', value: "http://$aos_staging_ip"]]
+            check_job_result(android_test.result)
+        }
+    }
+}catch (e){
+    result = "FAIL" // make sure other exceptions are recorded as failure too
+}
+
+
+try{
+    stage('iOS Tests'){
+        env.aos_stageName="iOS_Tests"
+
+        if ((env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName) || env.run_iOS_tests == "false"){
+            currentBuild.result = 'SUCCESS'
+        }else{
+            env.Resumed = "false"
+
+            def ios_test = build job: 'demoapp_folder/demoapp_tests_leanft_maven', parameters: [[$class: 'StringParameterValue', name: 'job_type', value: 'Ios'], [$class: 'StringParameterValue', name: 'URL', value: "http://$aos_staging_ip"]]
+            check_job_result(ios_test.result)
+        }
+    }
+}catch(e){
+    result = "FAIL" // make sure other exceptions are recorded as failure too
+}
+
+
+try {
+    stage('SRF Tests'){
+
+        env.aos_stageName="SRF_Tests"
+
+        if ((env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName) || env.run_srf_tests == "false"){
+            currentBuild.result = 'SUCCESS'
+        }else{
+
+            env.Resumed = "false"
+
+            def srf_tests = build job: 'demoapp_folder/demoapp_tests_leanft_maven', parameters: [[$class: 'StringParameterValue', name: 'job_type', value: 'CI'], [$class: 'StringParameterValue', name: 'URL', value: "http://$aos_staging_ip"], [$class: 'StringParameterValue', name: 'EnvironmentType', value: 'SRF']], propagate: false
+            check_job_result(srf_tests.result)
+        }
+    }
+} catch (e) {
+   result = "FAIL" // make sure other exceptions are recorded as failure too
+}
+
+try {
+stage('LeanFT Tests'){
+
+env.aos_stageName="LeanFT_Tests"
+
+if ((env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName) || env.run_leanFT_tests == "false"){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  def leanft_tests = build job: 'demoapp_folder/demoapp_tests_from_leanft_maven', parameters: [[$class: 'StringParameterValue', name: 'URL', value: "http://$aos_staging_ip"]], propagate: false
+  result = leanft_tests.result
+      if (result.equals("SUCCESS")) {
+      } else {
+         sh "exit 1" // this fails the stage
+      }
+}
+}
+} catch (e) {
+   result = "FAIL" // make sure other exceptions are recorded as failure too
+}
+
+stage('SRL Tests'){
+
+env.aos_stageName="SRL_Tests"
+
+if ((env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName) || env.run_srl_tests == "false"){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  build job: 'demoapp_folder/demoapp_tests_stormrunner'
+}
+}
+
+try {
+stage('Dotnet Tests'){
+ 
+ env.aos_stageName="Dotnet_Tests"
+ 
+ if ((env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName) || env.run_NET_tests == "false"){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+ 
+  env.aos_dotnet_test_status = "Success"
+ 
+  node('Windows2008R2'){
+ 
+   checkout([$class: 'GitSCM', branches: [[name: '*/master']], browser: [$class: 'GithubWeb', repoUrl: 'https://github.houston.softwaregrp.net/nimbus/aos-dotnet.git'], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'SparseCheckoutPaths', sparseCheckoutPaths: [[path: 'build']]], [$class: 'WipeWorkspace']], gitTool: 'Git version LeanFT Windows', submoduleCfg: [], userRemoteConfigs: [[url: 'git@github.houston.softwaregrp.net:nimbus/aos-dotnet.git']]])
+   
+   env.aos_dotnet_delivery = (Dependency_deliveryNumber().toInteger() + 1).toString()
+   env.aos_dotnet_version = Dependency_version()
+   
+   echo "Dotnet delivery ${aos_dotnet_delivery}"
+   
+   env.aos_description="Dotnet version: ${aos_dotnet_version}.${aos_dotnet_delivery}"
+   //currentBuild.description = "Dotnet version: ${aos_dotnet_version}.${aos_dotnet_delivery}"
+   
+   sh '''
+    pwd
+    if [ ! -d "/c/LeanFTJavaRunner/dotnet_release" ];then
+     echo "in 1"   
+     mkdir -p /c/LeanFTJavaRunner/dotnet_release
+    else
+     echo "in 2"
+     rm -rf /c/LeanFTJavaRunner/dotnet_release/*
+    fi
+    cd /c/LeanFTJavaRunner/dotnet_release/
+    curl -sS -L -o dotnet.zip "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/redirect?g=com.advantage.online.store&a=dotnet&v=${aos_dotnet_version}-SNAPSHOT&r=adm-demo-app-snapshot&p=zip"
+    unzip dotnet.zip
+   '''
+   
+   def dotnet_tests = build job: 'demoapp_folder/demoapp_tests_leanft_maven', parameters: [[$class: 'StringParameterValue', name: 'job_type', value: 'DotNet'], [$class: 'StringParameterValue', name: 'URL', value: "http://$aos_staging_ip"],[$class: 'StringParameterValue', name: 'APPLICATION_PATH', value: "C:\\LeanFTJavaRunner\\dotnet_release\\AdvantageShopAdministrator.exe"]], propagate: false
+   
+   result = dotnet_tests.result
+       if (result.equals("SUCCESS")) {
+       } else {
+          sh "exit 1" // this fails the stage
+       }
+ }
+ }
+ }
+ }catch (e) {
+        result = "FAIL" // make sure other exceptions are recorded as failure too
+		env.aos_dotnet_test_status = "Failed"
+ }
+
+stage('Upload Dotnet to latest release'){
+
+env.aos_stageName="Upload_Dotnet_to_latest_release"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  if (env.aos_dotnet_test_status == "Success"){
+  
+  node('Windows2008R2'){
+   
+  withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'e1e6e164-d262-4718-93db-69a4b24caf0b',
+  usernameVariable: 'USERNAME', passwordVariable: 'NEXUS_DEPLOY_PASSWORD']]) {
+  
+  sh '''#!/bin/bash
+  #declare parameters
+  COMMIT_ID=`cat build/version.xml | grep "<commitId>" | sed -e \'s/<[^>]*>//g\'`
+  NEW_COMMIT_ID=`git log --format="%H" -n 1`
+    
+  sed -i "s/<deliveryNumber>.*/<deliveryNumber>$aos_dotnet_delivery<\\/deliveryNumber>/g" "build/version.xml"
+  sed -i "s/<commitId>.*/<commitId>$NEW_COMMIT_ID<\\/commitId>/g" "build/version.xml"
+  
+  cp "build/version.xml" "build/pom.xml"
+  
+  #***************************************************************************UPLOAD TO LATEST***************************************************************************
+  
+  curl -f -v -F r=adm-demo-app-release -F hasPom="false" -F e=zip -F g=com.advantage.online.store -F a=Dotnet_Release -F v=latestVersion -F p=zip -F file=@/c/LeanFTJavaRunner/dotnet_release/dotnet.zip --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  #upload the xml file with the version
+  curl -f -v -F r=adm-demo-app-release -F hasPom="false" -F g=com.advantage.online.store -F a=Dotnet_Release -F c=version -F v=latestVersion -F p=pom -F file=@build/pom.xml --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  
+  #***************************************************************************UPLOAD TO RELEASE****************************************************************************
+  
+  curl -f -v -F r=adm-demo-app-release -F hasPom="false" -F e=zip -F g=com.advantage.online.store -F a=Dotnet_Release_${v} -F v=${aos_dotnet_delivery} -F p=zip -F file=@/c/LeanFTJavaRunner/dotnet_release/dotnet.zip --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  #upload the xml file with the version
+  curl -f -v -F r=adm-demo-app-release -F hasPom="false" -F g=com.advantage.online.store -F a=Dotnet_Release_${v} -F c=version -F v=${aos_dotnet_delivery} -F p=pom -F file=@build/pom.xml --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  
+  [ -f "./build/pom.xml" ] && rm -rf "./build/pom.xml"
+  git pull -q
+  git status
+  git add "build/version.xml"
+  git commit -m "updates version.xml" --quiet
+  git push origin master
+  '''
+  
+  }
+  }
+  }
+}
+}
+
+stage('Promote Staging tag to Dockerhub'){
+
+env.aos_stageName="Promote_Staging_tag_to_Dockerhub"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'c3de99a2-ff92-4a6a-873b-5f866bc60977',
+  usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_PASSWORD']]) {
+  
+  sh """
+  docker login -u=${env.DOCKERHUB_USERNAME} -p=${env.DOCKERHUB_PASSWORD}
+  """
+  
+  sh '''
+  export http_proxy="http://proxy.il.hpecorp.net:8080"
+  export https_proxy="http://proxy.il.hpecorp.net:8080"
+  IMAGEID_6_wars=`docker images | grep "advantageonlineshopping/aos-main-app-dev" | grep "ready_for_staging" | awk -F" " '{ print $3 }'`
+  IMAGEID_accountservice_war=`docker images | grep "advantageonlineshopping/aos-accountservice-dev" | grep "ready_for_staging" | awk -F" " '{ print $3 }'`
+  
+  docker tag ${IMAGEID_6_wars} advantageonlineshopping/aos-main-app-dev:staging
+  docker tag ${IMAGEID_accountservice_war} advantageonlineshopping/aos-accountservice-dev:staging
+  
+  docker push advantageonlineshopping/aos-main-app-dev:staging
+  docker push advantageonlineshopping/aos-accountservice-dev:staging
+  '''
+  }
+}
+}
+
+stage('Trigger Production Pipeline'){
+
+env.aos_stageName="Trigger_Production_Pipeline"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  sh '''
+   echo "no" > trigger_production.txt
+   docker pull advantageonlineshopping/aos-main-app-dev:production
+   docker pull advantageonlineshopping/aos-accountservice-dev:production
+   if [ "$(docker images | grep "advantageonlineshopping/aos-accountservice-dev" | grep "ready_for_staging" | awk '{print $3}')" != "$(docker images | grep "advantageonlineshopping/aos-accountservice-dev" | grep "production" | awk '{print $3}')" ] || [ "$(docker images | grep "advantageonlineshopping/aos-main-app-dev" | grep "ready_for_staging" | awk '{print $3}')" != "$(docker images | grep "advantageonlineshopping/aos-main-app-dev" | grep "production" | awk '{print $3}')" ]; then
+    echo "yes" > trigger_production.txt
+   fi
+  '''
+   def trigger_production = readFile "trigger_production.txt"
+   trigger_production = trigger_production.trim();
+   println trigger_production
+   if (trigger_production == 'yes') {
+    println "in"
+    build job: 'demoapp_folder/demoapp_build_pipeline_nightly', wait: false
+   }
+  }
+}
+
+if (env.aos_description != null){
+    currentBuild.description = "${aos_description}"
+}
+
+mail (to: 'adm_demo_app_development@microfocus.com',
+	subject: "Success: '${env.JOB_NAME}' (${env.BUILD_NUMBER})",
+	body: "Review the information at: ${env.JOB_URL}",
+	mimeType: 'text/html');
+	
+}	
+}catch(err){
+    node('UbuntuDemoApp'){
+
+    currentBuild.result = 'FAILURE'
+	
+	if (env.aos_description != null)
+	 currentBuild.description = "${aos_description}"
+	 
+	env.aos_failed_stageName=env.aos_stageName
+	
+	echo sh(returnStdout: true, script: 'env | grep "aos_" >${WORKSPACE}/resumed_build_params.groovy')
+	
+	sh 'sed -i \'s/^/env./g\' ${WORKSPACE}/resumed_build_params.groovy'
+    sh 'sed -i \'s/$/"/g\' ${WORKSPACE}/resumed_build_params.groovy'
+    sh 'sed -i \'s/=/="/g\' ${WORKSPACE}/resumed_build_params.groovy'
+	
+	mail (to: 'adm_demo_app_development@microfocus.com',
+		subject: "Failed: '${env.JOB_NAME}' (${env.BUILD_NUMBER})",
+		body: "Review the information at: ${env.JOB_URL}",
+		mimeType: 'text/html');
+		
+	}
+}
