@@ -1,0 +1,277 @@
+// all environment varoables we must declare with "aos_" prefix
+
+def deliveryNumber() {
+def matcher = readFile('build/version.xml') =~ '<deliveryNumber>(.+)</deliveryNumber>'
+matcher ? matcher[0][1] : null
+}
+
+def version() {
+def matcher = readFile('build/version.xml') =~ '<version>(.+)</version>'
+matcher ? matcher[0][1] : null
+}
+
+
+try{
+node('UbuntuDemoApp'){
+
+def mvnHome = tool name: 'Maven 3.3.9_Linux', type: 'hudson.tasks.Maven$MavenInstallation'
+env.PATH="${env.PATH}:${mvnHome}/bin"
+
+if (env.Resumed == "true"){
+ if (!fileExists("${WORKSPACE}/resumed_build_params.groovy"))
+   echo "cannot resume after build success."
+ else 
+   load "${WORKSPACE}/resumed_build_params.groovy"
+}
+
+stage('Checkout Branch'){
+env.aos_stageName="Checkout Branch"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  checkout([$class: 'GitSCM', branches: [[name: '*/' + env.Branch]], browser: [$class: 'GithubWeb', repoUrl: 'https://github.houston.softwaregrp.net/nimbus/aos-source'], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'WipeWorkspace']], gitTool: 'Git version 2.8.0-rc4 Linux', submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'efc35e72-9a72-4102-9b83-f6b54683ca0b', url: 'https://github.houston.softwaregrp.net/nimbus/aos-source.git']]])
+  
+  sh 'git checkout -b $Branch'
+  
+  env.aos_build_main_wars=false
+  env.aos_build_accountservice_war=false
+  env.aos_build_both_wars=false
+  env.aos_copy_Nimbus_files=false
+  commits = sh(returnStdout: true, script: 'git show --pretty="format:" --name-only | awk -F/ \'{print $1}\'').trim()
+
+  println(commits)
+    
+  if (commits == "" || commits == null){
+     println("no commits were detected, aos_build_both_wars=true")
+	 env.aos_build_both_wars=true
+	 env.aos_copy_Nimbus_files=true
+  }else{
+  
+    commits.eachLine { line ->
+      if (line.equals("catalog") || line.equals("mastercredit") || line.equals("order") || line.equals("safepay") || line.equals("shipex")) {
+          env.aos_build_main_wars=true
+      }
+      if (line.equals("accountservice")) {
+          env.aos_build_accountservice_war=true
+      }
+      if (line.equals("root") || line.equals("common") || line.equals("shared_resources")) {
+          env.aos_build_both_wars=true
+      }
+	  if (line.equals("Nimbus_aos")) {
+          env.aos_copy_Nimbus_files=true
+      }
+    }
+  }
+  
+  println("aos_build_main_wars = $aos_build_main_wars")
+  println("aos_build_accountservice_war = $aos_build_accountservice_war")
+  println("aos_build_both_wars = $aos_build_both_wars")
+  println("aos_copy_Nimbus_files = $aos_copy_Nimbus_files")
+  
+  sh '''current_delivery_number=`cat build/version.xml | grep "<deliveryNumber>" | sed -e \'s/<[^>]*>//g\'`
+  echo "current_delivery_number=$current_delivery_number"
+  new_delivery_number=$(($current_delivery_number+1))
+  echo "new_delivery_number=$new_delivery_number"
+  sed -i "s/<deliveryNumber>.*/<deliveryNumber>$new_delivery_number<\\/deliveryNumber>/g" "build/version.xml"
+  echo "end edit delivery number with $new_delivery_number"
+  
+  new_commitId=`git log --format="%H" -n 1`
+  echo "new_commitId=$new_commitId"
+  sed -i "s/<commitId>.*/<commitId>$new_commitId<\\/commitId>/g" "build/version.xml"
+  echo "end edit commit id with $new_commitId"'''
+  
+  sh 'cat build/version.xml'
+
+  env.aos_version = version()
+    if (aos_version) {
+      echo "Building version ${aos_version}"
+  }
+  
+  env.aos_delivery = deliveryNumber()
+    if (aos_delivery) {
+      echo "Building deliveryMumber ${aos_delivery}"
+  }
+  
+  env.aos_description="Version: ${aos_version}, Delivery: ${aos_delivery}"
+  //currentBuild.description = "Version: ${aos_version}, Delivery: ${aos_delivery}"
+}
+}
+
+stage('Build'){
+
+env.aos_stageName="Build"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+  
+  println("aos_build_main_wars = $aos_build_main_wars")
+  println("aos_build_accountservice_war = $aos_build_accountservice_war")
+  println("aos_build_both_wars = $aos_build_both_wars")
+  println("aos_copy_Nimbus_files = $aos_copy_Nimbus_files")
+  println("aos_force_build_wars = $aos_force_build_wars")
+  
+  if (env.aos_build_both_wars == "true" || env.aos_build_accountservice_war == "true" || env.aos_build_main_wars == "true" || env.aos_force_build_wars == "true"){
+    sh "bash edit_root_pom.sh"
+    
+    sh '''#!/bin/sh
+    
+    export http_proxy=http://proxy.il.hpecorp.net:8080
+    export https_proxy=http://proxy.il.hpecorp.net:8080
+    export npm_config_http_proxy=
+    export npm_config_https_proxy=
+    export npm_config_cache=./.cache
+    export no_proxy="localhost,127.0.0.1,.hpeswlab.net,.hpswlabs.adapps.hp.com,.devlab.ad"
+    
+    command="sed -i \'s/production.host.ip.*/production.host.ip=$aos_production_ip/g\' accountservice/src/main/resources/DemoApp.properties"
+    eval $command
+    
+    mvn -P production,pack_wars_without_accountservices package deploy -am -ff -e -X'''
+  }
+  }
+}
+
+stage('ZIP all wars'){
+    env.aos_stageName="ZIP all wars"
+
+    if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+        currentBuild.result = 'SUCCESS'
+    } else{
+        sh """
+            #create a new wars.zip including all the wars to upload to nexus
+              cd root/target
+              mkdir temp
+              mv wars.zip temp
+              cd temp
+              unzip "wars.zip" -d "."
+              cp ../../../accountservice/target/accountservice.war .
+              zip -r "wars.zip" .
+              mv wars.zip ..
+              rm -rf temp
+        """
+    }
+    
+}
+
+stage('Promote to Release & latest'){
+
+env.aos_stageName="Promote_to_Release_and_latest"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  if (env.aos_build_both_wars == "true" || env.aos_build_accountservice_war == "true" || env.aos_build_main_wars == "true" || env.aos_force_build_wars == "true"){
+  
+  withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'e1e6e164-d262-4718-93db-69a4b24caf0b',
+  usernameVariable: 'USERNAME', passwordVariable: 'NEXUS_DEPLOY_PASSWORD']]) {
+  
+  sh '''#!/bin/bash
+  echo "Advantage_Online_Shopping_Design_Release_${aos_version}"
+  #declare parameters
+  REPOSITORY_ID="adm-demo-app-release"
+  REPOSITORY_URL="http://mydtbld0028.hpeswlab.net:8081/nexus/content/repositories/${REPOSITORY_ID}/"
+  GROUP_ID=com.advantage.online.store
+  ARTIFACT_ID="Advantage_Online_Shopping_Design_Release_${aos_version}"
+  ARTIFACT_ID_LATEST="Advantage_Online_Shopping_Design_Release"
+  DELIVERY_NUMBER_LATEST="latestVersion"
+  PACKAGING=zip
+  FILE_NAME="root/target/wars.zip"
+  VERSION_FILE_NAME="build/pom.xml"
+  
+  cp "build/version.xml" "build/pom.xml"
+  #***************************************************************************UPLOAD TO RELEASE***************************************************************************
+  #upload the zip with all the wars
+  curl -f -v -F r=${REPOSITORY_ID} -F hasPom="false" -F e=${PACKAGING} -F g=${GROUP_ID} -F a=${ARTIFACT_ID} -F v=${aos_delivery} -F p=zip -F file=@${FILE_NAME} --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  #upload the xml file with the version
+  curl -f -v -F r=${REPOSITORY_ID} -F hasPom="false" -F e=${PACKAGING} -F g=${GROUP_ID} -F a=${ARTIFACT_ID} -F c=version -F v=${aos_delivery} -F p=pom -F file=@${VERSION_FILE_NAME} --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  
+  
+  #***************************************************************************UPLOAD TO LATEST****************************************************************************
+  #upload the zip with all the wars
+  curl -f -v -F r=${REPOSITORY_ID} -F hasPom="false" -F e=${PACKAGING} -F g=${GROUP_ID} -F a=${ARTIFACT_ID_LATEST} -F v=${DELIVERY_NUMBER_LATEST} -F p=zip -F file=@${FILE_NAME} --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  #upload the xml file with the version
+  curl -f -v -F r=${REPOSITORY_ID} -F hasPom="false" -F e=${PACKAGING} -F g=${GROUP_ID} -F a=${ARTIFACT_ID_LATEST} -F c=version -F v=${DELIVERY_NUMBER_LATEST} -F p=pom -F file=@${VERSION_FILE_NAME} --user "deployment:${NEXUS_DEPLOY_PASSWORD}" "http://mydtbld0183.hpeswlab.net:8081/nexus/service/local/artifact/maven/content"
+  
+  '''
+  }
+  }
+  }
+}
+
+stage('Commit to Stash build/version.xml'){
+
+env.aos_stageName="Commit_to_Stash_version.xml"
+
+if (env.Resumed == "true" && env.aos_failed_stageName != env.aos_stageName){
+ currentBuild.result = 'SUCCESS'
+}else{
+
+  env.Resumed = "false"
+
+  sh '''mvn clean
+  cd 	./pack_wars
+  mvn clean
+  cd ..
+  [ -f "./build/pom.xml" ] && rm -rf "./build/pom.xml"
+  git status
+  git pull origin $Branch -q
+  git add "build/version.xml"
+  git commit -m "updates version.xml" --quiet
+  git push https://kubany:5a44daacef44e8c31b413e7143777baa1c813263@github.houston.softwaregrp.net/nimbus/aos-source.git $Branch
+  '''
+  }
+}
+
+load "${WORKSPACE}/build/machines_ip.groovy"
+
+currentBuild.description = "${aos_description}"
+
+mail (to: 'adm_demo_alerts@hpe.com, kubany@hpe.com',
+	subject: "Success: '${env.JOB_NAME}' (${env.BUILD_NUMBER}) -Version: ${aos_version}, Delivery number ${aos_delivery}",
+	body: "Review the information at: ${env.JOB_URL}",
+	mimeType: 'text/html');
+	
+}	
+}catch(err){
+    node('UbuntuDemoApp'){
+	
+	if (env.aos_description != null)
+	 currentBuild.description = "${aos_description}"
+	 
+	env.aos_failed_stageName=env.aos_stageName
+	
+	dir(""){
+	
+	echo sh(returnStdout: true, script: 'env | grep "aos_" >${WORKSPACE}/resumed_build_params.groovy')
+	
+	sh 'sed -i \'s/^/env./g\' ${WORKSPACE}/resumed_build_params.groovy'
+    sh 'sed -i \'s/$/"/g\' ${WORKSPACE}/resumed_build_params.groovy'
+    sh 'sed -i \'s/=/="/g\' ${WORKSPACE}/resumed_build_params.groovy'
+	
+	def aos_version = version()
+    if (aos_version) {
+    echo "Building version ${aos_version}"
+    }
+
+    def aos_delivery = deliveryNumber()
+    if (aos_delivery) {
+    echo "Building deliveryMumber ${aos_delivery}"
+    }
+
+    currentBuild.result = 'FAILURE'
+	mail (to: 'adm_demo_alerts@hpe.com, kubany@hpe.com',
+		subject: "Failed: '${env.JOB_NAME}' (${env.BUILD_NUMBER}) -Version: ${aos_version}, Delivery number ${aos_delivery}",
+		body: "Review the information at: ${env.JOB_URL}",
+		mimeType: 'text/html');
+	}
+	}
+}

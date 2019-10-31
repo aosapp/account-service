@@ -1,0 +1,36 @@
+version: "3.0"
+services:
+  postgresql:
+   image: advantageonlineshopping/aos-postgres:${TAG}
+   ports:
+   - "POSTGRES_PORT:5432"
+   deploy:
+     placement:
+       constraints:
+         - node.hostname == HOST_NAME
+   volumes:
+   - data-volume-postgres:/var/lib/postgresql/data
+  tomcat_accountservice:
+   env_file:
+   - .env
+   - .env_private
+   image: advantageonlineshopping/aos-accountservice:${TAG}
+   ports:
+   - "ACCOUNT_PORT:8080"
+   deploy:
+     placement:
+       constraints:
+         - node.hostname == HOST_NAME
+  tomcat_6:
+   env_file:
+   - .env
+   - .env_private
+   image: advantageonlineshopping/aos-main-app:${TAG}
+   ports:
+   - "MAIN_PORT:8080"
+   deploy:
+     placement:
+       constraints:
+         - node.hostname == HOST_NAME
+volumes:
+ data-volume-postgres:
