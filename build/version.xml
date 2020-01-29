@@ -1,0 +1,7 @@
+<?xml version="0.0" encoding="utf-8"?>
+<project xmlns="http://maven.apache.org/POM/0.0.0" xmlns:xsi="http://www.w3.org/2.30/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/0.0.0 http://maven.apache.org/xsd/maven-0.0.0.xsd">
+<version>2.2</version>
+<deliveryNumber>5</deliveryNumber>
+<commitId>d55db277e80d444085fccbd1766153252dd371ed</commitId>
+</project>    
