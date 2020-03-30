@@ -1,0 +1,160 @@
+def deliveryNumber() {
+def matcher = readFile('build/version.xml') =~ '<deliveryNumber>(.+)</deliveryNumber>'
+matcher ? matcher[0][1] : null
+}
+
+def version() {
+def matcher = readFile('build/version.xml') =~ '<version>(.+)</version>'
+matcher ? matcher[0][1] : null
+}
+
+try{
+node('UbuntuDemoApp'){
+
+stage('Checkout'){
+
+checkout([$class: 'GitSCM', branches: [[name: '*/master']], browser: [$class: 'GithubWeb', repoUrl: 'https://github.houston.softwaregrp.net/nimbus/aos-source'], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'WipeWorkspace']], gitTool: 'Git version 2.8.0-rc4 Linux', submoduleCfg: [], userRemoteConfigs: [[url: 'git@github.houston.softwaregrp.net:nimbus/aos-source.git']]])
+
+
+sh """git checkout ${Release_version}"""
+
+
+sh '''current_delivery_number=`cat build/version.xml | grep "<deliveryNumber>" | sed -e \'s/<[^>]*>//g\'`
+echo "current_delivery_number=$current_delivery_number"
+new_delivery_number=$(($current_delivery_number+1))
+echo "new_delivery_number=$new_delivery_number"
+sed -i "s/<deliveryNumber>.*/<deliveryNumber>$new_delivery_number<\\/deliveryNumber>/g" "build/version.xml"
+echo "end edit delivery number with $new_delivery_number"
+
+new_commitId=`git log --format="%H" -n 1`
+echo "new_commitId=$new_commitId"
+sed -i "s/<commitId>.*/<commitId>$new_commitId<\\/commitId>/g" "build/version.xml"
+echo "end edit commit id with $new_commitId"'''
+
+sh 'cat build/version.xml'
+}
+
+load "${WORKSPACE}/build/machines_ip.groovy"
+
+env.v = version()
+  if (env.v) {
+    echo "Building version ${env.v}"
+}
+
+env.d = deliveryNumber()
+  if (env.d) {
+    echo "Building deliveryMumber ${env.d}"
+}
+
+stage('Build'){
+
+if ( env.Create_new_release_images == "true" ){
+
+def mvnHome = tool name: 'Maven 3.3.9_Linux', type: 'hudson.tasks.Maven$MavenInstallation'
+env.PATH="${env.PATH}:${mvnHome}/bin"
+def WORKSPACE=pwd()
+
+sh "bash edit_root_pom.sh"
+
+sh '''#!/bin/sh
+
+export http_proxy=http://proxy.il.hpecorp.net:8080
+export https_proxy=http://proxy.il.hpecorp.net:8080
+export npm_config_http_proxy=
+export npm_config_https_proxy=
+export npm_config_cache=./.cache
+export no_proxy="localhost,127.0.0.1,.hpeswlab.net,.hpswlabs.adapps.hp.com,.devlab.ad"
+
+mvn -P production,pack_wars_without_accountservices package install -am -ff -e -X'''
+}else
+ currentBuild.result = 'SUCCESS'
+}
+
+stage('Update Production Release'){
+
+withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'c3de99a2-ff92-4a6a-873b-5f866bc60977',
+usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_PASSWORD']]) {
+
+sh "docker login -u=${env.DOCKERHUB_USERNAME} -p=${env.DOCKERHUB_PASSWORD}"
+echo "*** logged in ***"
+sh '''#!/bin/bash
+# copy wars 
+if ( "${Create_new_release_images}" == "true" );then
+ all_wars_path=./root/target/wars.zip
+ accountservice_war_path=./accountservice/target/accountservice.war
+ cp ${all_wars_path} ./Dockerfiles/aos_all_in_one/tomcat_all
+ cp ${accountservice_war_path} ./Dockerfiles/aos_all_in_one/tomcat_account
+fi
+
+#changing production to use swarm (distributed)******************************
+	echo "*** edit .env  & docker-compose.yml ***"
+ 	echo "production_ip=$aos_production_ip"
+	ssh "$aos_production_ip" "docker stack rm STACK"
+	sed -i 's/LOCAL/AMAZON/g' "./Nimbus_aos/aos_distributed/.env"
+	sed -i 's/8081/8082/g' "./Nimbus_aos/aos_distributed/.env"
+	sed -i "s/latest/${Release_version}/g" "./Nimbus_aos/aos_distributed/.env"
+	sed -i 's/reverse_proxy=false/reverse_proxy=true/g' "./Nimbus_aos/aos_distributed/.env_private"
+	sed -i '/advantageonlineshopping/ s/$/:TAG/' ./Nimbus_aos/aos_distributed/docker-compose.yml
+
+
+#end of changing production to use swarm (distributed)******************************
+
+#echo "*** edit .env  & docker-compose.yml ***"
+# edited .evn & docker-compose.yml
+#sed -i 's/LOCAL/AMAZON/g' "./Nimbus_aos/aos_all_in_one/.env"
+#sed -i 's/8080/80/g' "./Nimbus_aos/aos_all_in_one/.env"
+#sed -i "s/latest/${Release_version}/g" "./Nimbus_aos/aos_all_in_one/.env"
+#sed -i '/services:/,/tomcat_6:/{//!d}' ./Nimbus_aos/aos_all_in_one/docker-compose.yml
+#sed -i '/depends_on:/,+1 d' ./Nimbus_aos/aos_all_in_one/docker-compose.yml
+#sed -i '/advantageonlineshopping/ s/$/:${TAG}/' ./Nimbus_aos/aos_all_in_one/docker-compose.yml
+#sed -i '/volumes:/,$d' ./Nimbus_aos/aos_all_in_one/docker-compose.yml
+'''
+
+sh """#!/bin/bash
+if ( "${Create_new_release_images}" == "true" );then
+ export http_proxy="http://proxy.il.hpecorp.net:8080"
+ export https_proxy="http://proxy.il.hpecorp.net:8080"
+ 
+ cd ./Dockerfiles/aos_all_in_one/tomcat_all
+ echo "docker build -t advantageonlineshopping/aos-main-app:${Release_version} ."
+ docker build -t advantageonlineshopping/aos-main-app:${Release_version} .
+ cd ../tomcat_account
+ docker build -t advantageonlineshopping/aos-accountservice:${Release_version} .
+ 
+ docker push advantageonlineshopping/aos-main-app:${Release_version}
+ docker push advantageonlineshopping/aos-accountservice:${Release_version}
+ 
+ cd ../../../
+fi
+
+echo "copy the docker-compose to production machine"
+#copy the docker-compose to production machine
+scp "./Nimbus_aos/aos_distributed/docker-compose.yml" root@$production_ip:/root/aos_release
+scp "./Nimbus_aos/aos_distributed/startup.sh" root@$production_ip:/root/aos_release
+scp "./Nimbus_aos/aos_distributed/.env" root@$production_ip:/root/aos_release
+scp "./Nimbus_aos/aos_distributed/.env_private" root@$production_ip:/root/aos_release
+
+ssh "$production_ip" "docker stack rm STACK"
+sleep 120
+ssh "$production_ip" \"chmod +x /root/aos_release/startup.sh && cd /root/aos_release && ./startup.sh\"
+"""
+}
+}
+
+
+mail (to: 'adm_demo_app_development@microfocus.com',
+	subject: "Success: '${env.JOB_NAME}' (${env.BUILD_NUMBER}) -Version: ${env.v}, Delivery number ${env.d}",
+	body: "Review the information at: ${env.JOB_URL}",
+	mimeType: 'text/html');
+	
+}	
+}catch(err){
+    node('UbuntuDemoApp'){
+
+    currentBuild.result = 'FAILURE'
+	mail (to: 'adm_demo_app_development@microfocus.com',
+		subject: "Failed: '${env.JOB_NAME}' (${env.BUILD_NUMBER}) -Version: ${env.v}, Delivery number ${env.d}",
+		body: "Review the information at: ${env.JOB_URL}",
+		mimeType: 'text/html');
+	}
+}

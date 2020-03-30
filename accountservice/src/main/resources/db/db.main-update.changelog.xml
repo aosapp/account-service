@@ -1,0 +1,15 @@
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-2.0.xsd">
+    <!-- Include only db structure changes (may be some metadata)-->
+
+    <!--
+    <preConditions>
+        <sequenceExists sequenceName=""></sequenceExists>
+    </preConditions>
+    -->
+    <!--Exapmle-->
+    <!--<include file="db/db.changelog.20151229034445.xml"></include>-->
+
+    <!--This changelog created by liquibase according to hibernate changes. In this step the real DB has changes only for lb tables.-->
+</databaseChangeLog>
