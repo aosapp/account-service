@@ -1,0 +1,60 @@
+version: '3.2'
+services:
+  config-service:
+    image: advantageonlineshopping/aos-configservice-dev:aos_config_deployment
+    ports:
+      - "${CONFIG_SERVICE_PORT}:${CONFIG_SERVICE_PORT}"
+    container_name: aos_config_service
+    restart: always
+    environment:
+      - CONFIG_REPO_FILE_SYSTEM=file:///configservice/microservices
+      - CONFIG_SERVICE_ACTIVE_PROFILE=native
+
+      - POSTGRES_SERVICE_NAME=postgresql
+      - MAIN_SERVICE_NAME=aos-web
+      - ACCOUNT_SERVICE_NAME=account-service
+      - ACTIVE_PROFILE=prod
+  gateway:
+    image: advantageonlineshopping/aos-gateway-dev:aos_config_deployment
+    ports:
+      - "${GATEWAY_PORT}:8080"
+    container_name: aos_gateway
+    restart: always
+    environment:
+      - CONFIG_SERVICE_URI=http://config-service:${CONFIG_SERVICE_PORT}
+    depends_on:
+      - "config-service"
+    env_file:
+      - .env
+  account-service:
+    env_file:
+      - .env
+    image: advantageonlineshopping/aos-accountservice-dev:aos_config_deployment
+    ports:
+      - "${ACCOUNT_PORT}:8080"
+    depends_on:
+      - "config-service"
+      - "postgresql"
+    container_name: account_service
+    restart: always
+    environment:
+      - CONFIG_SERVICE_URI=http://config-service:8888
+  aos-web:
+    env_file:
+      - .env
+      - .env_private
+    image: advantageonlineshopping/aos-main-app-dev:aos_config_deployment
+    ports:
+      - "${MAIN_PORT}:8080"
+    environment:
+      - CONFIG_SERVICE_URI=http://config-service:8888
+    depends_on:
+      - "postgresql"
+    container_name: aos_web
+    restart: always
+  postgresql:
+    image: advantageonlineshopping/aos-postgres-dev
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    container_name: postgresql
+    restart: always
