@@ -1,0 +1,21 @@
+spring:
+  profiles:
+    active: ${ACTIVE_PROFILE}
+  application:
+    name: accountservice
+  cloud:
+    config:
+      uri: ${CONFIG_SERVICE_URI}
+      enabled: true
+      fail-fast: true
+      request-read-timeout: 15000
+      request-connect-timeout: 15000
+    retry:
+      max-attempts: 10000
+      max-interval: 1000
+dynamic:
+  port:
+    bean: true
+mvn:
+  application:
+    name: accountservice
