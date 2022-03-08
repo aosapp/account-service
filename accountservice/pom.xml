@@ -31,7 +31,7 @@
         <!--<hibernate.version>5.1.0.Final</hibernate.version>-->
         <hibernate.version>4.3.9.Final</hibernate.version>
         <hibernate.jpa.version>1.0.0.Final</hibernate.jpa.version>
-        <liquibase.version>3.5.1</liquibase.version>
+        <liquibase.version>4.8.0</liquibase.version>
         <liquibase.hibernate4.version>3.5</liquibase.hibernate4.version>
         <liquibase.postgres.version>3.0</liquibase.postgres.version>
         <modelmapper.version>0.7.3</modelmapper.version>
